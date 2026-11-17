@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} — IsThisRealApp</title>
+  <meta name="description" content="{{ title }} for IsThisRealApp.">
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="logo" href="/" aria-label="IsThisRealApp home">IsThisRealApp</a>
+      <nav class="nav" aria-label="Primary">
+        <a href="/#status">Status</a>
+        <a href="/#feed">Feed</a>
+        <a href="/#pricing">Pricing</a>
+        <a class="nav-cta" href="/#pro">Pro</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal">
+    {% if page == 'privacy' %}
+    <h1>Privacy</h1>
+    <p class="legal-lead">Plain language about what we store. We don't sell your data.</p>
+    <h2>What we store</h2>
+    <ul>
+      <li>The text you submit to the checker, the verdict we returned, and the time of the check.</li>
+      <li>A cookie on this browser (<code>itr_client</code>) so we can count today's free checks and show your recent checks on this device. It is a random id, not your name.</li>
+      <li>If you join Pro early access: your email address, the services you added to a watchlist, and whether you want a daily or weekly brief.</li>
+    </ul>
+    <h2>What we don't collect</h2>
+    <ul>
+      <li>Payment information. Payments are not live, and signing up for early access does not charge you.</li>
+      <li>A phone number. Alerts, when they launch, will be email only.</li>
+      <li>We don't sell or rent your information.</li>
+    </ul>
+    <h2>How we use it</h2>
+    <p>Checker submissions are used to return a verdict and to show you recent checks. Early-access details are used to save your watchlist and brief preference, and to email you when Pro is ready — including before billing starts. We do not send those product emails yet; during early access we only store your preferences and log would-be alerts, we don't actually email them.</p>
+    <h2>Sources we consult</h2>
+    <p>Verdicts may use official status pages and publicly available news. We don't ask those services for information about you.</p>
+    <h2>Keeping or deleting it</h2>
+    <p>We keep check history and early-access signups so the product can work, including Pro history at launch. When a contact method is published on this site, you can use it to ask us to delete your early-access email and watchlist. Until then, you can make that request when we email you before launch.</p>
+    {% else %}
+    <h1>Terms</h1>
+    <p class="legal-lead">Short terms for using IsThisRealApp.</p>
+    <h2>What this is</h2>
+    <p>IsThisRealApp is an informational tool. It checks texts, links, outages, and rumors against official status pages, a curated knowledge base, and public news. It is not a guarantee, not legal or security advice, and not a substitute for official sources. You are responsible for how you act on a verdict.</p>
+    <h2>The free plan</h2>
+    <p>The free checker has a modest daily limit (currently 10 checks per day, counted on this browser). The live status board and verified feed are free to read.</p>
+    <h2>Pro early access</h2>
+    <p>Pro is planned at $5 per month and is not billing yet. Joining early access is free. We'll email you before billing starts. Early access lets us save your email, watchlist, and brief preference so we can offer watchlist alerts, a What's real brief, unlimited checks, and check history when Pro launches. Until launch, alert email is stubbed and logged, not actually sent.</p>
+    <h2>Acceptable use</h2>
+    <p>Don't use the site to break the law, to abuse our systems, or to submit others' private information without a good reason to check it. We may rate-limit or block abuse.</p>
+    <h2>Changes</h2>
+    <p>We may change the product, the daily free limit, or these terms. If billing is about to start, we'll email early-access signups first.</p>
+    <p>The site is provided as is. We try to be careful and we never invent sources, but we can be wrong or late, and official pages can be unreachable.</p>
+    {% endif %}
+    <p class="legal-back"><a href="/">← Back to the checker</a></p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <nav class="footer-nav" aria-label="Legal">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </nav>
+      <p class="disclaimer">Informational, not a guarantee. Always check official sources before you act. isthisrealapp.com</p>
+    </div>
+  </footer>
+</body>
+</html>

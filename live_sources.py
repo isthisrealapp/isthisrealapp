@@ -85,6 +85,10 @@ RUMOR_RE = re.compile(
     re.I,
 )
 RESOLVED_RE = re.compile(r"\b(resolved|restored|resumed|back online|is over|has ended)\b", re.I)
+ETA_RE = re.compile(
+    r"\b(?:ETA|E\.T\.A\.|estimated (?:resolution|restore|recovery|fix)(?: time)?)\s*[:\-]?\s*([^\n.]{3,80})",
+    re.I,
+)
 
 # Company registry: aliases plus optional official status endpoint.
 # Only endpoints verified from this environment are included.
@@ -332,11 +336,30 @@ class StatusResult:
     incidents: list[str] = field(default_factory=list)
     resolved_today: list[str] = field(default_factory=list)
     updated: datetime | None = None
+    level: str = ""  # ok, degraded, down, unknown
+    eta: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.level:
+            self.level = "ok" if self.operational else "down"
 
     def as_source(self) -> dict:
         label = f"{self.name} Status"
         ago = format_ago(self.updated) if self.updated else ""
         return {"name": label, "url": self.public_url, "time_ago": ago}
+
+    def as_board_item(self, checked_at: datetime | None = None) -> dict:
+        return {
+            "key": self.key,
+            "name": self.name,
+            "level": self.level,
+            "summary": self.summary,
+            "eta": self.eta,
+            "status_url": self.public_url,
+            "updated": format_ago(self.updated) if self.updated else "",
+            "checked_at": format_ago(checked_at or self.updated) if (checked_at or self.updated) else "",
+            "query": f"Is {self.name} down?",
+        }
 
 
 @dataclass
@@ -588,11 +611,44 @@ def fetch_google_news(query: str, timeout: float = FETCH_TIMEOUT) -> list[NewsIt
     return items
 
 
+def _eta_from_statuspage_incidents(incidents: list[dict]) -> str | None:
+    """Return an official timing phrase only when the status page states one."""
+    for inc in incidents:
+        until = inc.get("scheduled_until") or inc.get("expected_resolution")
+        dt = _parse_iso(until) if until else None
+        if dt:
+            return "Until " + dt.astimezone(ET_TZ).strftime("%-I:%M %p Eastern, %b %-d")
+        for upd in inc.get("incident_updates") or []:
+            body = upd.get("body") or ""
+            match = ETA_RE.search(body)
+            if match:
+                phrase = match.group(0).strip().rstrip(".")
+                if 3 < len(phrase) <= 140:
+                    return phrase
+    return None
+
+
+def _level_from_indicator(indicator: str, incident_impacts: list[str]) -> str:
+    indicator = (indicator or "none").lower()
+    impacts = [i.lower() for i in incident_impacts if i and i.lower() not in {"none", "none_isolated"}]
+    # The official rollup indicator is the status page's own summary.
+    if indicator in {"none", "none_isolated", ""}:
+        return "ok"
+    if indicator in {"major", "critical"} or any(i in {"major", "critical"} for i in impacts):
+        return "down"
+    if indicator in {"minor", "maintenance"} or any(i in {"minor", "maintenance"} for i in impacts):
+        return "degraded"
+    return "degraded"
+
+
 def _parse_statuspage(meta: dict, status_body: bytes | None, inc_body: bytes | None) -> StatusResult:
     operational = True
     summary = f"{meta['name']}'s official status page is reachable."
     incidents: list[str] = []
+    impacts: list[str] = []
     updated = None
+    eta = None
+    indicator = "none"
     if status_body:
         data = json.loads(status_body)
         status = data.get("status") or {}
@@ -600,13 +656,21 @@ def _parse_statuspage(meta: dict, status_body: bytes | None, inc_body: bytes | N
         summary = status.get("description") or summary
         operational = indicator in {"none", "none_isolated", ""}
         updated = _parse_iso((data.get("page") or {}).get("updated_at"))
+    raw_incidents: list[dict] = []
     if inc_body:
         data = json.loads(inc_body)
-        for inc in data.get("incidents") or []:
+        raw_incidents = [inc for inc in (data.get("incidents") or []) if isinstance(inc, dict)]
+        for inc in raw_incidents:
             name = inc.get("name") or inc.get("impact") or "Incident"
             incidents.append(name)
-        if incidents:
+            if inc.get("impact"):
+                impacts.append(str(inc.get("impact")))
+        # Isolated incidents with impact "none" do not override the official
+        # rollup. The top-level indicator is the status page's own summary.
+        if incidents and indicator not in {"none", "none_isolated", ""}:
             operational = False
+        eta = _eta_from_statuspage_incidents(raw_incidents)
+    level = _level_from_indicator(indicator, impacts)
     return StatusResult(
         key="",
         name=meta["name"],
@@ -615,6 +679,8 @@ def _parse_statuspage(meta: dict, status_body: bytes | None, inc_body: bytes | N
         summary=summary,
         incidents=incidents,
         updated=updated,
+        level=level,
+        eta=eta,
     )
 
 
@@ -640,8 +706,15 @@ def _parse_heroku(meta: dict, body: bytes) -> StatusResult:
     data = json.loads(body)
     systems = data.get("status") or []
     bad = [s.get("system") for s in systems if (s.get("status") or "green") != "green"]
+    red = [s.get("system") for s in systems if (s.get("status") or "green") == "red"]
     incidents = [i.get("title") for i in (data.get("incidents") or []) if i.get("title")]
     operational = not bad and not incidents
+    if red:
+        level = "down"
+    elif bad or incidents:
+        level = "degraded"
+    else:
+        level = "ok"
     summary = "All systems operational" if operational else (
         "Issues reported on " + ", ".join(bad or incidents[:3])
     )
@@ -652,6 +725,7 @@ def _parse_heroku(meta: dict, body: bytes) -> StatusResult:
         operational=operational,
         summary=summary,
         incidents=incidents or bad,
+        level=level,
     )
 
 
@@ -683,6 +757,12 @@ def _parse_apple(meta: dict, body: bytes) -> StatusResult:
             if start_dt and (updated is None or start_dt > updated):
                 updated = start_dt
     operational = not ongoing
+    if len(ongoing) >= 2:
+        level = "down"
+    elif ongoing:
+        level = "degraded"
+    else:
+        level = "ok"
     if ongoing:
         names = []
         for line in ongoing:
@@ -711,6 +791,7 @@ def _parse_apple(meta: dict, body: bytes) -> StatusResult:
         incidents=ongoing,
         resolved_today=resolved_today,
         updated=updated or now,
+        level=level,
     )
 
 
@@ -846,7 +927,76 @@ def fetch_status(entity_key: str, timeout: float = FETCH_TIMEOUT) -> StatusResul
         return None
 
 
+
+BOARD_CACHE_KEY = "status-board:v1"
+BOARD_CACHE_TTL = 120
+
+
+def gather_status_board(keys: list[str] | None = None, budget: float = 6.0) -> dict:
+    """Fetch official status for the board. Cached, fail-soft, never invented."""
+    from catalog import BOARD_KEYS, display_name, status_page_url
+
+    keys = list(keys or BOARD_KEYS)
+    cached = cache_get(BOARD_CACHE_KEY)
+    if cached:
+        return refresh_board_labels(cached)
+
+    start = time.monotonic()
+    now = datetime.now(ET_TZ)
+
+    def remaining() -> float:
+        return max(0.4, budget - (time.monotonic() - start))
+
+    results: dict[str, StatusResult | None] = {key: None for key in keys}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(fetch_status, key, remaining()): key for key in keys}
+        for fut in as_completed(futures, timeout=max(0.5, remaining() + 0.3)):
+            key = futures[fut]
+            try:
+                results[key] = fut.result()
+            except Exception:
+                results[key] = None
+
+    items = []
+    for key in keys:
+        result = results.get(key)
+        if result:
+            items.append(result.as_board_item(checked_at=now))
+        else:
+            items.append(
+                {
+                    "key": key,
+                    "name": display_name(key),
+                    "level": "unknown",
+                    "summary": "Couldn't reach the official status page just now.",
+                    "eta": None,
+                    "status_url": status_page_url(key),
+                    "updated": "",
+                    "checked_at": format_ago(now),
+                    "query": f"Is {display_name(key)} down?",
+                }
+            )
+    payload = {
+        "items": items,
+        "checked_at": now.isoformat(),
+        "checked_at_label": "just now",
+        "checked_at_display": now.strftime("%-I:%M %p Eastern"),
+    }
+    cache_set(BOARD_CACHE_KEY, payload, ttl=BOARD_CACHE_TTL)
+    return payload
+
+
+def refresh_board_labels(payload: dict) -> dict:
+    payload = dict(payload)
+    checked = _parse_iso(payload.get("checked_at"))
+    payload["checked_at_label"] = format_ago(checked) if checked else "just now"
+    if checked:
+        payload["checked_at_display"] = checked.astimezone(ET_TZ).strftime("%-I:%M %p Eastern")
+    return payload
+
+
 def _item_mentions(item: NewsItem, aliases: list[str], entity_name: str | None) -> bool:
+
     if not aliases and not entity_name:
         return True
     blob = f"{item.title} {item.outlet}".lower()

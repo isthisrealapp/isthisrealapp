@@ -2,7 +2,7 @@
 
 IsThisRealApp is a consumer micro-SaaS that checks a suspicious text, email, link, or rumor and returns a shareable verdict: Scam, Likely scam, Hoax, Real outage (not a hack), Real attack, Working fine, No outage found, No hack found, Probably not real, or Looks legit.
 
-Built to be helpful, not alarming. The page has three parts: a rumor checker, a short verified “What's real right now” feed, and a $5/month Alerts plan (early access — payments are not live yet).
+Built to be helpful, not alarming. The free site has a rumor checker (10 checks a day), a live official status board for major services, and a short verified “What's real right now” feed. Pro is $5/month when it launches: a personal watchlist with email alerts, a daily or weekly brief, unlimited checks, and check history. Payments are not live — early access is free until launch, and we'll email before billing starts.
 
 ## Run locally
 
@@ -42,11 +42,18 @@ python add_feed_item.py \
 
 `--tag` must be `outage`, `attack`, or `hoax`. Use `--notify` to also stub-send an alert.
 
-When a new item is confirmed, stub-notify early-access subscribers (logs to `data/alert_log.jsonl`; nothing is actually emailed or texted):
+When a new item is confirmed, stub-notify subscribers who are watching the affected service (logs to `data/alert_log.jsonl`; nothing is actually emailed):
 
 ```bash
 python send_alert.py --id apple-outage-2026-11-17
 python send_alert.py --latest
+python send_alert.py --service github --kind outage --summary "GitHub is reporting an incident."
+```
+
+Poll official status pages for watchlist changes (not scheduled; first run writes a baseline and does not alert):
+
+```bash
+python poll_status.py
 ```
 
 ## What’s in a check

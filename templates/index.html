@@ -4,76 +4,185 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IsThisRealApp — Paste a text or rumor. We'll tell you if it's real.</title>
-  <meta name="description" content="Got a weird text, outage, or rumor? Ask about any company. We'll tell you if it's real. See verified outages and attacks, and get alerts when a new one is confirmed.">
+  <meta name="description" content="Check a suspicious text, outage, or rumor in seconds. See live official status for major services, a verified feed of what's real right now, and join Pro early access for watchlist alerts.">
   <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
   <a class="skip-link" href="#query">Skip to checker</a>
 
-  <main class="sheet">
-    <div class="hero">
-      <header class="brand">
-        <a class="logo" href="/" aria-label="IsThisRealApp home">IsThisRealApp</a>
-      </header>
-
-      <h1>Got a weird text, outage, or rumor? Ask about any company. We'll tell you if it's real.</h1>
-
-      <form id="check-form" autocomplete="off">
-        <label class="sr-only" for="query">Paste a text, email, link, or rumor</label>
-        <textarea id="query" name="query" rows="5" maxlength="8000" required placeholder="Is Verizon down? Was IKEA hacked? Or paste a suspicious text."></textarea>
-        <button type="submit" class="btn" id="check-btn">
-          <span class="btn-label">Check it</span>
-          <span class="btn-wait" hidden>Checking…</span>
-        </button>
-      </form>
-
-      <div id="result" class="result" hidden></div>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="logo" href="/" aria-label="IsThisRealApp home">IsThisRealApp</a>
+      <nav class="nav" aria-label="Primary">
+        <a href="#status">Status</a>
+        <a href="#feed">Feed</a>
+        <a href="#pricing">Pricing</a>
+        <a class="nav-cta" href="#pro">Pro</a>
+      </nav>
     </div>
+  </header>
 
-    <section class="feed" id="feed" aria-labelledby="feed-heading">
-      <h2 id="feed-heading">What's real right now</h2>
-      <ul class="feed-list">
-        {% for item in feed %}
-        <li class="feed-item">
-          <span class="tag tag-{{ item.tag }}">{{ item.tag_label }}</span>
-          <div class="feed-body">
-            <p class="feed-headline">{{ item.headline }}</p>
-            <p class="feed-meta">
-              <time datetime="{{ item.occurred_on }}">{{ item.display_date }}</time>
-              · <a href="{{ item.source_url }}" target="_blank" rel="noopener">{{ item.source_name }}</a>
-            </p>
+  <main>
+    <section class="hero" id="top">
+      <div class="hero-inner">
+        <h1>Paste a text or rumor.<br>We'll tell you if it's real.</h1>
+        <form id="check-form" autocomplete="off">
+          <label class="sr-only" for="query">Paste a text, email, link, or rumor</label>
+          <textarea id="query" name="query" rows="5" maxlength="8000" required placeholder="Is Verizon down? Was IKEA hacked? Or paste a suspicious text."></textarea>
+          <div class="chips" role="group" aria-label="Try an example">
+            <button type="button" class="chip" data-example="Is Verizon down?">Is Verizon down?</button>
+            <button type="button" class="chip" data-example="USPS: Your package is on hold. Pay a $3.95 delivery fee at usps-tracking-app.com to release it." data-label="Paste a suspicious text">Paste a suspicious text</button>
+            <button type="button" class="chip" data-example="Is the 90-day blackout starting November 17 real?">Is this news real?</button>
           </div>
-        </li>
-        {% else %}
-        <li class="feed-empty">No verified items yet.</li>
-        {% endfor %}
-      </ul>
+          <button type="submit" class="btn" id="check-btn">
+            <span class="btn-label">Check it</span>
+            <span class="btn-wait" hidden>Checking…</span>
+          </button>
+        </form>
+        <div id="result" class="result" hidden></div>
+        <p id="quota" class="quota" hidden></p>
+      </div>
     </section>
 
-    <section class="upgrade" id="alerts" aria-labelledby="alerts-heading">
-      <h2 id="alerts-heading">Get alerted the moment a major outage or cyberattack is confirmed</h2>
-      <p class="upgrade-price">$5/month. Email or text. Payments aren't live yet — this is early access.</p>
-      <form id="alerts-form" class="alerts-form">
-        <fieldset class="channel-pick">
-          <legend class="sr-only">How should we reach you?</legend>
-          <label><input type="radio" name="channel" value="email" checked> Email</label>
-          <label><input type="radio" name="channel" value="text"> Text</label>
-        </fieldset>
-        <label class="sr-only" for="alerts-email">Email</label>
-        <input id="alerts-email" type="email" name="email" required placeholder="Email" autocomplete="email">
-        <label class="sr-only" for="alerts-phone">Phone (needed for text alerts)</label>
-        <input id="alerts-phone" type="tel" name="phone" placeholder="Phone (for text alerts)" autocomplete="tel">
-        <button type="submit" class="btn">Get early access</button>
-        <p id="alerts-status" class="form-status" role="status" hidden></p>
-      </form>
+    <section class="section status-section" id="status" aria-labelledby="status-heading">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 id="status-heading">Status right now</h2>
+          <p class="section-meta" id="board-meta">
+            {% if board['checked_at_label'] %}
+              Official pages, checked {{ board['checked_at_label'] }}
+            {% else %}
+              Official status pages, cached
+            {% endif %}
+          </p>
+        </div>
+        <ul class="status-grid" id="status-grid">
+          {% for item in board['items'] %}
+          <li>
+            <button type="button" class="status-cell level-{{ item.level }}" data-query="{{ item.query }}" title="{{ item.summary }}">
+              <span class="dot" aria-hidden="true"></span>
+              <span class="status-name">{{ item.name }}</span>
+              {% if item.level == 'degraded' %}
+              <span class="status-flag">Issue</span>
+              {% elif item.level == 'down' %}
+              <span class="status-flag">Outage</span>
+              {% elif item.level == 'unknown' %}
+              <span class="status-flag">—</span>
+              {% endif %}
+            </button>
+          </li>
+          {% else %}
+          <li class="board-empty">Loading official status…</li>
+          {% endfor %}
+        </ul>
+        <p class="section-note">Green is official normal, amber is a degraded issue, red is an outage. Click a service to run a check. If a page couldn't be reached, we show a dash — we never guess.</p>
+      </div>
+    </section>
+
+    <section class="section feed-section" id="feed" aria-labelledby="feed-heading">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 id="feed-heading">What's real right now</h2>
+          <p class="section-meta">Verified outages, attacks, and hoaxes</p>
+        </div>
+        <ul class="feed-list">
+          {% for item in feed %}
+          <li class="feed-item">
+            <span class="tag tag-{{ item.tag }}">{{ item.tag_label }}</span>
+            <div class="feed-body">
+              <p class="feed-headline">{{ item.headline }}</p>
+              <p class="feed-meta">
+                <time datetime="{{ item.occurred_on }}">{{ item.display_date }}</time>
+                · <a href="{{ item.source_url }}" target="_blank" rel="noopener">{{ item.source_name }}</a>
+              </p>
+            </div>
+          </li>
+          {% else %}
+          <li class="feed-empty">No verified items yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+
+    <section class="section pricing-section" id="pricing" aria-labelledby="pricing-heading">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 id="pricing-heading">Free and Pro</h2>
+          <p class="section-meta">$5 a month when Pro launches. Early access is free until then.</p>
+        </div>
+        <div class="plans">
+          <article class="plan">
+            <h3>Free</h3>
+            <p class="plan-price">$0</p>
+            <ul>
+              <li>{{ free_daily_limit }} checks a day</li>
+              <li>Live official status board</li>
+              <li>Verified “what's real” feed</li>
+              <li>Recent checks on this device</li>
+            </ul>
+          </article>
+          <article class="plan plan-pro">
+            <p class="plan-pill">Early access</p>
+            <h3>Pro</h3>
+            <p class="plan-price">$5<span>/mo</span></p>
+            <ul>
+              <li>Unlimited checks and full check history</li>
+              <li>A personal watchlist — email the moment a confirmed outage or cyberattack hits a service you rely on, and the all-clear when it's fixed</li>
+              <li>A daily or weekly “What's real” email brief of verified outages, attacks, and debunked hoaxes</li>
+              <li>Everything in Free</li>
+            </ul>
+            <a class="btn btn-on-dark" href="#pro">Join Pro early access</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pro-section" id="pro" aria-labelledby="pro-heading">
+      <div class="section-inner narrow">
+        <h2 id="pro-heading">Join Pro early access</h2>
+        <p class="pro-lead">Email only. Early access, free until launch; we'll email before billing starts. Planned price is $5/month. Payments aren't live, and we won't charge you just for signing up.</p>
+        <form id="pro-form" class="pro-form">
+          <label class="sr-only" for="pro-email">Email</label>
+          <input id="pro-email" type="email" name="email" required placeholder="Email" autocomplete="email">
+
+          <fieldset class="watch-field">
+            <legend>Watchlist — pick the services you rely on</legend>
+            <p class="field-hint">We'll email you if a confirmed outage or cyberattack hits one of these, and again when it's fixed.</p>
+            <div class="watch-grid" id="watch-grid">
+              {% for item in watchlist %}
+              <label class="watch-chip">
+                <input type="checkbox" name="watchlist" value="{{ item.key }}">
+                <span>{{ item.name }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+
+          <fieldset class="brief-field">
+            <legend>What's real brief</legend>
+            <label><input type="radio" name="brief" value="daily"> Daily</label>
+            <label><input type="radio" name="brief" value="weekly" checked> Weekly</label>
+          </fieldset>
+
+          <button type="submit" class="btn" id="pro-btn">Join Pro early access</button>
+          <p id="pro-status" class="form-status" role="status" hidden></p>
+        </form>
+      </div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p class="disclaimer">Informational, not a guarantee. Check official sources. isthisrealapp.com</p>
+    <div class="footer-inner">
+      <nav class="footer-nav" aria-label="Legal">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </nav>
+      <p class="disclaimer">Informational, not a guarantee. Always check official sources before you act. isthisrealapp.com</p>
+    </div>
   </footer>
 
+  <script id="board-boot" type="application/json">{{ board | tojson }}</script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

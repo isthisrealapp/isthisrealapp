@@ -3,6 +3,7 @@
   const queryEl = document.getElementById("query");
   const btn = document.getElementById("check-btn");
   const resultEl = document.getElementById("result");
+  const quotaEl = document.getElementById("quota");
   const btnLabel = btn.querySelector(".btn-label");
   const btnWait = btn.querySelector(".btn-wait");
 
@@ -20,6 +21,30 @@
       .replaceAll('"', "&quot;");
   }
 
+  function showQuota(remaining, limit) {
+    if (!quotaEl || remaining == null || !limit) return;
+    quotaEl.hidden = false;
+    quotaEl.textContent =
+      remaining === 0
+        ? `You've used today's ${limit} free checks.`
+        : `${remaining} of ${limit} free checks left today.`;
+  }
+
+  function stepHtml(step, index) {
+    let body = escapeHtml(step.text || "");
+    if (step.url) {
+      const label = escapeHtml(step.link_label || step.url);
+      const url = escapeHtml(step.url);
+      const linked = `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;
+      if (body.includes(label)) {
+        body = body.replace(label, linked);
+      } else {
+        body = `${body} ${linked}`;
+      }
+    }
+    return `<li><span>${body}</span></li>`;
+  }
+
   function renderResult(data) {
     const sources = (data.sources || []).slice(0, 3);
     const sourceHtml = sources.length
@@ -34,6 +59,15 @@
     const conf = data.confidence
       ? `<p class="confidence">${escapeHtml(data.confidence)}</p>`
       : "";
+    const steps = (data.steps || []).filter((s) => s && s.text);
+    const stepsHtml = steps.length
+      ? `<div class="steps">
+          <h3>What to do now</h3>
+          <ol>${steps.map(stepHtml).join("")}</ol>
+        </div>`
+      : (data.what_to_do
+        ? `<p class="action"><strong>What to do:</strong> ${escapeHtml(data.what_to_do)}</p>`
+        : "");
 
     resultEl.hidden = false;
     resultEl.innerHTML = `
@@ -42,11 +76,12 @@
         ${sub}
         <p class="reason">${escapeHtml(data.reason)}</p>
         ${conf}
-        <p class="action"><strong>What to do:</strong> ${escapeHtml(data.what_to_do)}</p>
+        ${stepsHtml}
         ${sourceHtml}
         <button type="button" class="share-btn" id="share-btn">Share</button>
       </article>
     `;
+    showQuota(data.remaining, data.daily_limit);
 
     const shareBtn = document.getElementById("share-btn");
     const shareUrl = new URL(data.share_url, window.location.origin).toString();
@@ -94,6 +129,7 @@
       if (!res.ok) {
         resultEl.hidden = false;
         resultEl.innerHTML = `<p class="error-msg">${escapeHtml(data.error || "Something went wrong.")}</p>`;
+        if (data.daily_limit != null) showQuota(data.remaining, data.daily_limit);
         return;
       }
       renderResult(data);
@@ -112,28 +148,84 @@
     runCheck(query);
   });
 
-  const alerts = document.getElementById("alerts-form");
-  const status = document.getElementById("alerts-status");
-  alerts.addEventListener("submit", async (e) => {
+  document.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const example = chip.getAttribute("data-example") || "";
+      queryEl.value = example;
+      if (example) runCheck(example);
+    });
+  });
+
+  function bindStatusCells(root) {
+    root.querySelectorAll(".status-cell").forEach((cell) => {
+      cell.addEventListener("click", () => {
+        const q = cell.getAttribute("data-query") || "";
+        if (!q) return;
+        queryEl.value = q;
+        runCheck(q);
+        document.getElementById("top").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+  bindStatusCells(document);
+
+  function renderBoard(board) {
+    const grid = document.getElementById("status-grid");
+    const meta = document.getElementById("board-meta");
+    if (!grid || !board || !board.items || !board.items.length) return;
+    if (meta && board.checked_at_label) {
+      meta.textContent = `Official pages, checked ${board.checked_at_label}`;
+    }
+    grid.innerHTML = board.items.map((item) => {
+      const flag =
+        item.level === "degraded" ? `<span class="status-flag">Issue</span>`
+        : item.level === "down" ? `<span class="status-flag">Outage</span>`
+        : item.level === "unknown" ? `<span class="status-flag">—</span>`
+        : "";
+      return `<li>
+        <button type="button" class="status-cell level-${escapeHtml(item.level)}" data-query="${escapeHtml(item.query)}" title="${escapeHtml(item.summary || "")}">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="status-name">${escapeHtml(item.name)}</span>
+          ${flag}
+        </button>
+      </li>`;
+    }).join("");
+    bindStatusCells(grid);
+  }
+
+  const boot = document.getElementById("board-boot");
+  if (boot && boot.textContent.trim()) {
+    try { renderBoard(JSON.parse(boot.textContent)); } catch {}
+  }
+  fetch("/api/status-board")
+    .then((r) => r.json())
+    .then(renderBoard)
+    .catch(() => {});
+
+  const proForm = document.getElementById("pro-form");
+  const proStatus = document.getElementById("pro-status");
+  proForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const email = document.getElementById("alerts-email").value.trim();
-    const phone = document.getElementById("alerts-phone").value.trim();
-    const channel = (alerts.querySelector('input[name="channel"]:checked') || {}).value || "email";
-    status.hidden = false;
-    status.className = "form-status";
-    status.textContent = "Saving…";
+    const email = document.getElementById("pro-email").value.trim();
+    const brief = (proForm.querySelector('input[name="brief"]:checked') || {}).value || "weekly";
+    const watchlist = Array.from(proForm.querySelectorAll('input[name="watchlist"]:checked')).map((el) => el.value);
+    proStatus.hidden = false;
+    proStatus.className = "form-status";
+    proStatus.textContent = "Saving…";
     try {
       const res = await fetch("/api/alerts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, phone, channel }),
+        body: JSON.stringify({ email, watchlist, brief }),
       });
       const data = await res.json();
-      status.className = "form-status " + (res.ok ? "ok" : "err");
-      status.textContent = res.ok ? "You're on the early access list." : (data.error || "Try again.");
+      proStatus.className = "form-status " + (res.ok ? "ok" : "err");
+      proStatus.textContent = res.ok
+        ? (data.message || "You're on the Pro early access list.")
+        : (data.error || "Try again.");
     } catch {
-      status.className = "form-status err";
-      status.textContent = "Couldn't save that. Try again.";
+      proStatus.className = "form-status err";
+      proStatus.textContent = "Couldn't save that. Try again.";
     }
   });
 })();

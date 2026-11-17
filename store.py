@@ -1,4 +1,4 @@
-"""SQLite helpers for the verified feed and Alerts early-access signups."""
+"""SQLite helpers for the verified feed, Pro early-access signups, and checks."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ ALERT_LOG = DATA_DIR / "alert_log.jsonl"
 
 VALID_TAGS = {"outage", "attack", "hoax"}
 VALID_CHANNELS = {"email", "text"}
+VALID_BRIEFS = {"daily", "weekly"}
+FREE_DAILY_LIMIT = 10
 EMAIL_RE = re.compile(r"^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$", re.I)
 PHONE_RE = re.compile(r"^\+?[\d\s().\-]{7,20}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -64,8 +66,26 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     db.executescript(SCHEMA)
+    migrate(db)
     db.commit()
     return db
+
+
+def _table_columns(db: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+
+
+def migrate(db: sqlite3.Connection) -> None:
+    signup_cols = _table_columns(db, "alerts_signups")
+    if "watchlist" not in signup_cols:
+        db.execute("ALTER TABLE alerts_signups ADD COLUMN watchlist TEXT")
+    if "brief" not in signup_cols:
+        db.execute("ALTER TABLE alerts_signups ADD COLUMN brief TEXT DEFAULT 'weekly'")
+    check_cols = _table_columns(db, "checks")
+    if "client_id" not in check_cols:
+        db.execute("ALTER TABLE checks ADD COLUMN client_id TEXT")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_checks_client_created ON checks (client_id, created_at)")
+    db.commit()
 
 
 def seed_feed_if_empty(db: sqlite3.Connection) -> int:
@@ -214,44 +234,168 @@ def format_item(row: sqlite3.Row) -> dict:
     }
 
 
-def add_signup(db: sqlite3.Connection, email: str, phone: str | None, channel: str) -> dict:
+def add_signup(
+    db: sqlite3.Connection,
+    email: str,
+    phone: str | None = None,
+    channel: str = "email",
+    watchlist=None,
+    brief: str = "weekly",
+) -> dict:
+    """Store a Pro early-access signup. Alerts are email-only."""
+    from catalog import normalize_watchlist
+
     email = (email or "").strip().lower()
     if not EMAIL_RE.match(email):
         raise ValueError("Enter a valid email address.")
-    channel = (channel or "email").strip().lower()
-    if channel not in VALID_CHANNELS:
-        raise ValueError("Choose email or text.")
-    phone = re.sub(r"\s+", " ", (phone or "").strip()) or None
-    if phone and not PHONE_RE.match(phone):
-        raise ValueError("Enter a valid phone number, or leave it blank.")
-    if channel == "text" and not phone:
-        raise ValueError("A phone number is needed for text alerts.")
+    channel = "email"
+    brief = (brief or "weekly").strip().lower()
+    if brief not in VALID_BRIEFS:
+        raise ValueError("Choose a daily or weekly brief.")
+    keys = normalize_watchlist(watchlist)
+    watchlist_json = json.dumps(keys)
     now = datetime.now(timezone.utc).isoformat()
     existing = db.execute("SELECT id FROM alerts_signups WHERE email = ?", (email,)).fetchone()
     if existing:
         db.execute(
-            "UPDATE alerts_signups SET phone = ?, channel = ?, created_at = ? WHERE email = ?",
-            (phone, channel, now, email),
+            """
+            UPDATE alerts_signups
+            SET phone = NULL, channel = ?, watchlist = ?, brief = ?, created_at = ?
+            WHERE email = ?
+            """,
+            (channel, watchlist_json, brief, now, email),
         )
         status = "updated"
+        message = (
+            "Your early access details were updated. It's free until launch, "
+            "and we'll email you before billing starts."
+        )
     else:
         db.execute(
-            "INSERT INTO alerts_signups (email, phone, channel, status, created_at) VALUES (?, ?, ?, 'early_access', ?)",
-            (email, phone, channel, now),
+            """
+            INSERT INTO alerts_signups
+                (email, phone, channel, status, created_at, watchlist, brief)
+            VALUES (?, NULL, ?, 'early_access', ?, ?, ?)
+            """,
+            (email, channel, now, watchlist_json, brief),
         )
         status = "joined"
+        message = (
+            "You're on the Pro early access list. It's free until launch, "
+            "and we'll email you before billing starts."
+        )
     db.commit()
-    return {"ok": True, "status": status, "message": "You're on the early access list."}
+    return {
+        "ok": True,
+        "status": status,
+        "message": message,
+        "watchlist": keys,
+        "brief": brief,
+    }
 
 
-def list_subscribers(db: sqlite3.Connection) -> list[dict]:
+def _parse_watchlist(value) -> list[str]:
+    from catalog import normalize_watchlist
+
+    return normalize_watchlist(value)
+
+
+def list_subscribers(db: sqlite3.Connection, service: str | None = None) -> list[dict]:
     rows = db.execute(
-        "SELECT email, phone, channel, status FROM alerts_signups ORDER BY id"
+        "SELECT email, phone, channel, status, watchlist, brief FROM alerts_signups ORDER BY id"
     ).fetchall()
-    return [dict(row) for row in rows]
+    out = []
+    for row in rows:
+        item = dict(row)
+        item["watchlist"] = _parse_watchlist(item.get("watchlist"))
+        if service:
+            # A legacy signup with an empty watchlist is treated as watching everything.
+            if item["watchlist"] and service not in item["watchlist"]:
+                continue
+        out.append(item)
+    return out
 
 
 def log_alert_send(entry: dict) -> None:
     DATA_DIR.mkdir(exist_ok=True)
     with ALERT_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def record_check(
+    db: sqlite3.Connection,
+    check_id: str,
+    query: str,
+    verdict: str,
+    result: dict,
+    client_id: str | None,
+) -> None:
+    db.execute(
+        "INSERT INTO checks (id, query, verdict, result_json, created_at, client_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            check_id,
+            query,
+            verdict,
+            json.dumps(result, ensure_ascii=False),
+            datetime.now(timezone.utc).isoformat(),
+            client_id,
+        ),
+    )
+    db.commit()
+
+
+def _start_of_today_et() -> str:
+    from zoneinfo import ZoneInfo
+
+    et = ZoneInfo("America/New_York")
+    now = datetime.now(et)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start.astimezone(timezone.utc).isoformat()
+
+
+def count_checks_today(db: sqlite3.Connection, client_id: str) -> int:
+    if not client_id:
+        return 0
+    start = _start_of_today_et()
+    row = db.execute(
+        "SELECT COUNT(*) FROM checks WHERE client_id = ? AND created_at >= ?",
+        (client_id, start),
+    ).fetchone()
+    return int(row[0] if row else 0)
+
+
+def checks_remaining_today(db: sqlite3.Connection, client_id: str) -> int:
+    used = count_checks_today(db, client_id)
+    return max(0, FREE_DAILY_LIMIT - used)
+
+
+def list_history(db: sqlite3.Connection, client_id: str, limit: int = 10) -> list[dict]:
+    if not client_id:
+        return []
+    rows = db.execute(
+        """
+        SELECT id, query, verdict, result_json, created_at
+        FROM checks
+        WHERE client_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (client_id, limit),
+    ).fetchall()
+    items = []
+    for row in rows:
+        try:
+            payload = json.loads(row["result_json"])
+        except (TypeError, ValueError):
+            payload = {}
+        items.append(
+            {
+                "id": row["id"],
+                "query": row["query"],
+                "verdict": row["verdict"],
+                "display": payload.get("display") or payload.get("label") or row["verdict"],
+                "reason": payload.get("reason") or "",
+                "created_at": row["created_at"],
+            }
+        )
+    return items

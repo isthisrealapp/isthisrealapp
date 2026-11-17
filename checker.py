@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from guidance import build_steps
 from live_sources import enrich_scam_with_live, gather_evidence, interpret, parse_query
 
 ROOT = Path(__file__).resolve().parent
@@ -898,7 +899,9 @@ def check(text: str, use_llm: bool = True, use_live: bool = True) -> dict:
     result = decide(text, get_events(), live=live)
     if live:
         result["entity"] = live.parsed.entity_name
+        result["entity_key"] = live.parsed.entity_key
         result["topic"] = live.parsed.topic
+    result["steps"] = build_steps(result, live)
     if use_llm:
         result = maybe_polish_with_llm(result)
     return result
