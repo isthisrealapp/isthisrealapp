@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
-from live_sources import enrich_scam_with_live, gather_evidence, interpret
+from live_sources import enrich_scam_with_live, gather_evidence, interpret, parse_query
 
 ROOT = Path(__file__).resolve().parent
 KB_PATH = ROOT / "knowledge_base.json"
@@ -26,18 +26,21 @@ VERDICT_META = {
         "display": "Scam",
         "tone": "danger",
         "short": "Don't click or pay.",
+        "confidence": "Clear scam signals.",
     },
     "likely_scam": {
         "label": "Likely scam",
         "display": "Likely scam",
         "tone": "danger",
         "short": "Treat it as unsafe.",
+        "confidence": "Strong scam warning signs.",
     },
     "hoax": {
         "label": "Hoax",
         "display": "Hoax",
         "tone": "hoax",
         "short": "This isn't happening.",
+        "confidence": "Debunked by trusted sources.",
     },
     "real_outage": {
         "label": "Real outage, not a hack",
@@ -45,6 +48,7 @@ VERDICT_META = {
         "sublabel": "Outage, not a hack",
         "tone": "real",
         "short": "A real outage — not a confirmed hack.",
+        "confidence": "Based on official or trusted reports.",
     },
     "real_attack": {
         "label": "Real attack",
@@ -52,18 +56,42 @@ VERDICT_META = {
         "sublabel": "Confirmed attack",
         "tone": "real_attack",
         "short": "This was a confirmed attack.",
+        "confidence": "Confirmed in trusted reporting.",
     },
     "working_fine": {
         "label": "Working fine",
         "display": "Working fine",
         "tone": "ok",
         "short": "Official status says everything is working.",
+        "confidence": "Official status confirms this.",
     },
-    "unclear": {
-        "label": "Unclear",
-        "display": "Unclear",
-        "tone": "unclear",
-        "short": "We can't confirm this.",
+    "no_outage_found": {
+        "label": "No outage found",
+        "display": "No outage found",
+        "tone": "clear",
+        "short": "Nothing suggests a widespread outage.",
+        "confidence": "No official status or trusted reports of an outage.",
+    },
+    "no_hack_found": {
+        "label": "No hack found",
+        "display": "No hack found",
+        "tone": "clear",
+        "short": "No trusted reports of a hack.",
+        "confidence": "No trusted reports found.",
+    },
+    "probably_not_real": {
+        "label": "Probably not real",
+        "display": "Probably not real",
+        "tone": "rumor",
+        "short": "No trusted outlet is reporting this.",
+        "confidence": "No credible coverage.",
+    },
+    "looks_legit": {
+        "label": "Looks legit",
+        "display": "Looks legit",
+        "tone": "legit",
+        "short": "No scam red flags found.",
+        "confidence": "No scam signals found.",
     },
 }
 
@@ -419,7 +447,105 @@ def match_knowledge_base(text: str, events: list[dict]) -> list[tuple[int, dict]
     return scored
 
 
+
+# Keyboard-row fragments and repeated-character junk, used to reject
+# input that is not a message, link, or question.
+_KEY_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890")
+_KEYSMASH_RE = re.compile(
+    r"^(?:asdf+|asdfgh(?:jkl)?|qwer(?:ty)?(?:uiop)?|zxcv(?:bnm)?|"
+    r"qazwsx|abcde?f?g?|hjkl|qwerty|lorem(?:ipsum)?|(.)\1{3,})$",
+    re.I,
+)
+_COMMON_WORDS = {
+    "a", "an", "the", "is", "was", "are", "were", "did", "do", "does", "am",
+    "i", "you", "we", "they", "my", "your", "our", "me", "us", "it", "this",
+    "that", "have", "has", "had", "can", "could", "should", "would", "will",
+    "not", "no", "yes", "or", "and", "but", "if", "for", "to", "from", "of",
+    "in", "on", "at", "with", "about", "be", "been", "being", "real", "true",
+    "fake", "down", "outage", "hacked", "hack", "attack", "scam", "hoax",
+    "message", "text", "email", "link", "reminder", "appointment", "flight",
+    "package", "account", "login", "password", "pay", "fee", "tomorrow",
+    "today", "tonight", "internet", "shutting", "shutdown", "die", "died",
+    "dead", "rumor", "news", "company", "service", "app", "website", "site",
+    "please", "thank", "thanks", "hi", "hello", "hey", "dear", "sir", "madam",
+    "call", "contact", "click", "here", "urgent", "verify", "confirm",
+    "having", "nationwide", "major", "working", "broken", "offline",
+}
+
+EMPTY_QUERY_ERROR = "Paste a text, email, link, or rumor to check."
+NONSENSE_QUERY_ERROR = (
+    "That doesn't look like a message, link, or rumor we can check. "
+    "Try pasting the text or question."
+)
+
+
+def _keys_adjacent(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    for row in _KEY_ROWS:
+        i = row.find(a)
+        j = row.find(b)
+        if i >= 0 and j >= 0 and abs(i - j) <= 1:
+            return True
+    # simple vertical neighbors on QWERTY
+    cols = {ch: i for i, ch in enumerate("qwertyuiop")}
+    for upper, lower in (
+        ("qwertyuiop", "asdfghjkl"),
+        ("asdfghjkl", "zxcvbnm"),
+    ):
+        if a in upper and b in lower and abs(upper.find(a) - lower.find(b)) <= 1:
+            return True
+        if a in lower and b in upper and abs(lower.find(a) - upper.find(b)) <= 1:
+            return True
+    return False
+
+
+def _is_keysmash(token: str) -> bool:
+    s = re.sub(r"[^a-z0-9]", "", token.lower())
+    if len(s) < 4:
+        return False
+    if _KEYSMASH_RE.fullmatch(s):
+        return True
+    if any(s in row and len(s) >= 4 for row in _KEY_ROWS):
+        return True
+    adj = sum(1 for a, b in zip(s, s[1:]) if _keys_adjacent(a, b))
+    return adj / (len(s) - 1) >= 0.75
+
+
+def _looks_like_word(token: str) -> bool:
+    s = re.sub(r"[^a-z]", "", token.lower())
+    if not s:
+        return False
+    if s in _COMMON_WORDS:
+        return True
+    if _is_keysmash(s):
+        return False
+    if len(s) >= 3 and re.search(r"[aeiouy]", s) and not re.fullmatch(r"(.)\1+", s):
+        return True
+    return False
+
+
+def validate_query(text: str) -> str | None:
+    """Return an error message if the input is empty or not checkable."""
+    t = (text or "").strip()
+    if not t:
+        return EMPTY_QUERY_ERROR
+    if URL_RE.search(t) or re.search(r"\S+@\S+\.\S+", t):
+        return None
+    letters = re.sub(r"[^A-Za-z]", "", t)
+    if not letters:
+        return NONSENSE_QUERY_ERROR
+    tokens = re.findall(r"[A-Za-z0-9']+", t)
+    if any(_looks_like_word(tok) for tok in tokens):
+        return None
+    compact = letters.lower()
+    if _is_keysmash(compact) or len(tokens) <= 2:
+        return NONSENSE_QUERY_ERROR
+    return None
+
+
 def is_question(text: str) -> bool:
+
     t = text.strip()
     if t.endswith("?"):
         return True
@@ -506,7 +632,6 @@ def decide(text: str, events: list[dict], live=None) -> dict:
                 verdict = alt["verdict"]
             else:
                 top = None
-                verdict = "unclear"
 
         if top:
             reason = top["summary"]
@@ -525,10 +650,10 @@ def decide(text: str, events: list[dict], live=None) -> dict:
             )
 
     # No KB match, no strong scam signals
-    if weight >= 3:
+    if weight >= 4:
         reason = _scam_reason(signals, text, None, likely=True)
         what = "Don't click or pay. Confirm it in the official app or website."
-        return _result("likely_scam" if weight >= 4 else "unclear", text, reason, what, [], signals, None)
+        return _result("likely_scam", text, reason, what, [], signals, None)
 
     if live:
         suggestion = interpret(live)
@@ -540,14 +665,20 @@ def decide(text: str, events: list[dict], live=None) -> dict:
             suggestion.get("sources") or [],
             signals,
             None,
+            confidence=suggestion.get("confidence"),
         )
 
-    reason = (
-        "We can't confirm this. It doesn't match a known hoax or attack, and it "
-        "doesn't show the usual scam red flags."
+    suggestion = interpret(None, text=text)
+    return _result(
+        suggestion["verdict"],
+        text,
+        suggestion["reason"],
+        suggestion["what_to_do"],
+        suggestion.get("sources") or [],
+        signals,
+        None,
+        confidence=suggestion.get("confidence"),
     )
-    what = "If you were expecting it, confirm through a number or site you already use."
-    return _result("unclear", text, reason, what, [], signals, None)
 
 
 
@@ -615,6 +746,7 @@ def _result(
     sources: list[dict],
     signals: list[Signal],
     event: dict | None,
+    confidence: str | None = None,
 ) -> dict:
     meta = VERDICT_META[verdict]
     return {
@@ -625,6 +757,7 @@ def _result(
         "headline": meta["short"],
         "reason": reason,
         "what_to_do": what_to_do,
+        "confidence": (confidence or meta.get("confidence") or "").strip(),
         "sources": sources,
         "signals": [{"code": s.code, "label": s.label, "detail": s.detail} for s in signals],
         "event_id": event["id"] if event else None,
@@ -751,16 +884,9 @@ def get_events() -> list[dict]:
 
 def check(text: str, use_llm: bool = True, use_live: bool = True) -> dict:
     text = (text or "").strip()
-    if not text:
-        return _result(
-            "unclear",
-            "",
-            "Paste a text, link, or question so we can check it.",
-            "Add the message or rumor you want us to look at.",
-            [],
-            [],
-            None,
-        )
+    error = validate_query(text)
+    if error:
+        return {"error": error, "query": text}
     if len(text) > 8000:
         text = text[:8000]
     live = None

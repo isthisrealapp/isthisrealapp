@@ -70,6 +70,20 @@ HOAX_RE = re.compile(
     r"not true|isn't happening|no evidence|rumor|misleading|debunking)\b",
     re.I,
 )
+RUMOR_RE = re.compile(
+    r"\b("
+    r"is (it|this|that) (real|true|happening|fake)|"
+    r"is it true|"
+    r"did .{0,80}\b(die|died|pass away|get (killed|arrested|shot))|"
+    r"\b(died|dead|passed away)\b|"
+    r"shut(?:ting)? down (tomorrow|today|tonight|soon|next)|"
+    r"internet shut|"
+    r"end of the (world|internet)|"
+    r"blackout|"
+    r"\brumor\b"
+    r")",
+    re.I,
+)
 RESOLVED_RE = re.compile(r"\b(resolved|restored|resumed|back online|is over|has ended)\b", re.I)
 
 # Company registry: aliases plus optional official status endpoint.
@@ -332,7 +346,7 @@ class ParsedQuery:
     entity_name: str | None = None
     entity_aliases: list[str] = field(default_factory=list)
     has_status: bool = False
-    topic: str = "general"  # outage, attack, hoax, general
+    topic: str = "general"  # outage, attack, hoax, rumor, general
     news_query: str = ""
 
 
@@ -418,8 +432,8 @@ def parse_query(text: str) -> ParsedQuery:
     topic = "general"
     if ATTACK_RE.search(lowered):
         topic = "attack"
-    elif HOAX_RE.search(lowered) or re.search(r"\b(blackout|is (it|this|that) real|is it true)\b", lowered):
-        topic = "hoax"
+    elif RUMOR_RE.search(lowered) or HOAX_RE.search(lowered):
+        topic = "rumor"
     elif OUTAGE_RE.search(lowered) or re.search(r"\b(cancel(?:led|ed)?|ground stop|flights?)\b", lowered):
         topic = "outage"
 
@@ -440,7 +454,7 @@ def parse_query(text: str) -> ParsedQuery:
                 has_status = key in STATUS_PAGES
                 break
 
-    if not entity_key:
+    if not entity_key and topic not in {"rumor", "hoax"}:
         m = re.search(
             r"^\s*(?:is|was|are|were|did)\s+(?:there\s+(?:a\s+|an\s+)?|the\s+)?(.+?)\s+"
             r"(?:down|hacked|breached|out|real|true|canceled|cancelled|having|experiencing)\b",
@@ -454,6 +468,8 @@ def parse_query(text: str) -> ParsedQuery:
                 words = guess.split()
                 if len(words) > 3:
                     guess = " ".join(words[:3])
+                if guess.islower():
+                    guess = guess.title()
                 entity_name = guess
                 aliases = [guess.lower()]
 
@@ -475,15 +491,15 @@ def _build_news_query(raw: str, entity_name: str | None, aliases: list[str], top
         return f'"{name}" (hacked OR hack OR breach OR cyberattack OR ransomware)'
     if entity_name and topic == "outage":
         return f'"{name}" (outage OR down OR disruption OR offline)'
-    if entity_name and topic == "hoax":
-        return f'"{name}" (hoax OR rumor OR debunked OR "fact check" OR false)'
+    if entity_name and topic in {"hoax", "rumor"}:
+        return f'"{name}" (hoax OR rumor OR debunked OR "fact check" OR false OR died OR death)'
     if entity_name:
         # Generic question about a company — look for either outages or attacks.
         return f'"{name}" (outage OR down OR hacked OR breach OR cyberattack)'
     # Fall back to a cleaned version of the user's words, plus fact-check terms for claims.
     cleaned = re.sub(r"[^\w\s-]+", " ", raw)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    if topic == "hoax":
+    if topic in {"hoax", "rumor"}:
         return f"{cleaned} (hoax OR debunked OR \"fact check\" OR false OR rumor)"
     return cleaned[:120]
 
@@ -875,7 +891,7 @@ def gather_evidence(text: str, budget: float = 5.5) -> LiveEvidence:
         if parsed.entity_key and parsed.entity_key in STATUS_PAGES:
             jobs[pool.submit(fetch_status, parsed.entity_key, remaining())] = "status"
         jobs[pool.submit(fetch_google_news, parsed.news_query, remaining())] = "news"
-        if parsed.topic == "hoax":
+        if parsed.topic in {"hoax", "rumor"}:
             fq = parsed.news_query + ' (site:snopes.com OR site:politifact.com OR site:factcheck.org OR site:pbs.org OR "fact check")'
             jobs[pool.submit(fetch_google_news, fq, remaining())] = "factcheck"
         for fut in as_completed(jobs, timeout=max(0.5, remaining() + 0.2)):
@@ -940,13 +956,26 @@ def pick_sources(ev: LiveEvidence, *groups: list[NewsItem], include_status: bool
     return out
 
 
-def interpret(ev: LiveEvidence) -> dict:
-    """Turn live evidence into a verdict suggestion. Conservative: Unclear unless evidence is solid."""
+def interpret(ev: LiveEvidence | None, text: str | None = None) -> dict:
+    """Turn live evidence into a decisive verdict. Never invents facts."""
+    if ev is None:
+        ev = LiveEvidence(parsed=parse_query(text or ""))
     status = ev.status
     name = ev.parsed.entity_name or "this"
     attack_score, attack_hits = score_topic(ev.news, ATTACK_RE)
     outage_score, outage_hits = score_topic(ev.news, OUTAGE_RE)
     hoax_score, hoax_hits = score_topic(ev.news, HOAX_RE)
+
+    strong = []
+    if hoax_score >= 1.1 and hoax_hits:
+        strong.append(("hoax", hoax_score))
+    if ev.parsed.topic != "outage" and attack_score >= 1.5 and attack_hits:
+        strong.append(("attack", attack_score))
+    if outage_score >= 1.6 and outage_hits:
+        strong.append(("outage", outage_score))
+    strong.sort(key=lambda x: x[1], reverse=True)
+    mixed = len(strong) >= 2 and (strong[0][1] - strong[1][1]) < 1.0
+    mixed_line = "Sources are mixed."
 
     # Official current incident is the strongest outage signal.
     if status and not status.operational:
@@ -961,12 +990,14 @@ def interpret(ev: LiveEvidence) -> dict:
                 "reason": f"Recent reporting describes a cyberattack involving {name}.",
                 "what_to_do": "Use official apps and sites only, and watch for follow-up from the company.",
                 "sources": pick_sources(ev, attack_hits, include_status=True),
+                "confidence": mixed_line if mixed else "Confirmed in trusted reporting.",
             }
         return {
             "verdict": "real_outage",
             "reason": _one_line(reason),
             "what_to_do": f"Check {status.name}'s official status page if something still looks off.",
             "sources": pick_sources(ev, outage_hits, include_status=True),
+            "confidence": mixed_line if mixed else "Official status confirms this.",
         }
 
     if hoax_score >= 1.1 and hoax_hits:
@@ -979,6 +1010,7 @@ def interpret(ev: LiveEvidence) -> dict:
             "reason": _one_line(reason),
             "what_to_do": "Don't share the claim. Official alerts come from government agencies, not viral posts.",
             "sources": pick_sources(ev, hoax_hits, include_status=False),
+            "confidence": mixed_line if mixed else "Debunked by trusted sources.",
         }
 
     if ev.parsed.topic != "outage" and attack_score >= 1.5 and attack_hits:
@@ -991,6 +1023,7 @@ def interpret(ev: LiveEvidence) -> dict:
             "reason": _one_line(reason),
             "what_to_do": "If you entered a card or password on an affected site, watch your accounts.",
             "sources": pick_sources(ev, attack_hits, include_status=bool(status)),
+            "confidence": mixed_line if mixed else "Confirmed in trusted reporting.",
         }
 
     if outage_score >= 1.6 and outage_hits:
@@ -1005,17 +1038,26 @@ def interpret(ev: LiveEvidence) -> dict:
                 "reason": _one_line(reason),
                 "what_to_do": f"Use {name}'s official app or site. If something still fails, check the official status page.",
                 "sources": pick_sources(ev, outage_hits, include_status=True),
+                "confidence": "Based on official or trusted reports.",
             }
         if status and status.operational and not resolved:
-            # Official page disagrees with the headlines.
-            reason = (
-                f"{name}'s official status page reports no current incident, but some outlets are writing about issues."
-            )
+            # Official page is firsthand for current status; news disagrees.
+            if outage_score >= 3.0 and len(outage_hits) >= 2:
+                reason = f"Recent trusted reports describe an outage or disruption involving {name}."
+                return {
+                    "verdict": "real_outage",
+                    "reason": _one_line(reason),
+                    "what_to_do": f"Use {name}'s official app or website, not a link from a text. Also check the official status page.",
+                    "sources": pick_sources(ev, outage_hits, include_status=True),
+                    "confidence": mixed_line,
+                }
+            reason = f"{name} isn't down. Its official status page says everything is working."
             return {
-                "verdict": "unclear",
+                "verdict": "working_fine",
                 "reason": _one_line(reason),
-                "what_to_do": f"Check {name}'s official status page and official social accounts before acting on rumors.",
+                "what_to_do": f"If it still looks broken for you, check {name}'s official status page.",
                 "sources": pick_sources(ev, outage_hits, include_status=True),
+                "confidence": mixed_line,
             }
         if status and status.resolved_today and status.operational:
             reason = status.summary
@@ -1024,6 +1066,7 @@ def interpret(ev: LiveEvidence) -> dict:
                 "reason": _one_line(reason),
                 "what_to_do": f"If something still looks off, check {name}'s official status page.",
                 "sources": pick_sources(ev, outage_hits, include_status=True),
+                "confidence": "Official status confirms this.",
             }
         if resolved:
             reason = f"Recent reports describe an outage at {name} that appears to have been resolved."
@@ -1034,6 +1077,7 @@ def interpret(ev: LiveEvidence) -> dict:
             "reason": _one_line(reason),
             "what_to_do": f"Use {name}'s official app or website, not a link from a text.",
             "sources": pick_sources(ev, outage_hits, include_status=bool(status)),
+            "confidence": mixed_line if mixed else "Based on official or trusted reports.",
         }
 
     # Official page is fine, no strong news.
@@ -1045,6 +1089,7 @@ def interpret(ev: LiveEvidence) -> dict:
                 "reason": _one_line(reason),
                 "what_to_do": f"If something still looks off, check {name}'s official status page.",
                 "sources": pick_sources(ev, outage_hits, include_status=True),
+                "confidence": "Official status confirms this.",
             }
         reason = f"{name} isn't down. Its official status page says everything is working."
         return {
@@ -1052,20 +1097,84 @@ def interpret(ev: LiveEvidence) -> dict:
             "reason": _one_line(reason),
             "what_to_do": f"If it still looks broken for you, check {name}'s official status page.",
             "sources": pick_sources(ev, include_status=True),
+            "confidence": "Official status confirms this.",
         }
 
-    # Weak or no official confirmation
-    name_disp = "X" if ev.parsed.entity_key == "x" else (ev.parsed.entity_name or name)
-    if ev.parsed.entity_name:
-        reason = f"No sign of a widespread {name_disp} outage in trusted news right now."
-    else:
-        reason = "No sign of this in trusted news right now."
+    return _no_evidence(ev)
+
+
+def _display_name(ev: LiveEvidence) -> str:
+    if ev.parsed.entity_key == "x":
+        return "X"
+    return ev.parsed.entity_name or "this"
+
+
+def _no_evidence(ev: LiveEvidence) -> dict:
+    """Decisive fallback when official status and trusted news don't confirm the claim."""
+    name = _display_name(ev)
+    topic = ev.parsed.topic
+    # Don't attach leftover unrelated headlines as if they support the call.
+    sources: list[dict] = []
+
+    if topic == "attack":
+        if ev.parsed.entity_name:
+            reason = f"No trusted reports that {name} was hacked."
+        else:
+            reason = "No trusted reports of a hack."
+        return {
+            "verdict": "no_hack_found",
+            "reason": _one_line(reason),
+            "what_to_do": "If a message claimed there was a hack, don't click any links in it. Check the company's official website.",
+            "sources": sources,
+            "confidence": "No trusted reports found.",
+        }
+
+    if topic == "outage":
+        if ev.parsed.entity_name:
+            reason = (
+                f"Nothing suggests {name} is down right now. "
+                "No trusted news or reports of a widespread outage."
+            )
+        else:
+            reason = "Nothing suggests a widespread outage right now. No trusted news or reports of one."
+        return {
+            "verdict": "no_outage_found",
+            "reason": _one_line(reason),
+            "what_to_do": "If it isn't working for you, it's probably local. Try restarting your device.",
+            "sources": sources,
+            "confidence": "No official status or trusted reports of an outage.",
+        }
+
+    if topic in {"hoax", "rumor"} or _looks_like_claim(ev.parsed.text):
+        reason = "No trusted outlet is reporting this. Treat it as a rumor until it's confirmed."
+        return {
+            "verdict": "probably_not_real",
+            "reason": _one_line(reason),
+            "what_to_do": "Don't share it until a trusted outlet confirms it.",
+            "sources": sources,
+            "confidence": "No credible coverage.",
+        }
+
+    reason = "No scam red flags found. If unsure, contact them using a number you already trust."
     return {
-        "verdict": "unclear",
+        "verdict": "looks_legit",
         "reason": _one_line(reason),
-        "what_to_do": "If you need to reach a company, use its official app or website — not a link from a message.",
-        "sources": pick_sources(ev, ev.news[:3]) if ev.news else [],
+        "what_to_do": "If unsure, contact them using a number you already trust.",
+        "sources": sources,
+        "confidence": "No scam signals found.",
     }
+
+
+def _looks_like_claim(text: str) -> bool:
+    t = (text or "").strip()
+    if t.endswith("?"):
+        return True
+    return bool(re.match(
+        r"^\s*(is|was|are|were|did|does|do|has|have|had|why|what|who|can|could|should)\b",
+        t,
+        re.I,
+    ))
+
 
 
 def _one_line(text: str) -> str:

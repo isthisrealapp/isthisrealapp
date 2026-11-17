@@ -21,7 +21,7 @@ from flask import (
     send_from_directory,
 )
 
-from checker import check as run_check
+from checker import check as run_check, validate_query
 from share_card import render_share_card
 from store import (
     DATA_DIR,
@@ -75,12 +75,15 @@ def favicon():
 def api_check():
     payload = request.get_json(silent=True) or {}
     query = (payload.get("query") or request.form.get("query") or "").strip()
-    if not query:
-        return jsonify({"error": "Paste a text, email, link, or rumor to check."}), 400
+    error = validate_query(query)
+    if error:
+        return jsonify({"error": error}), 400
     if len(query) > 8000:
         return jsonify({"error": "That's a bit long — try pasting the key part of the message."}), 400
 
     result = run_check(query, use_llm=True)
+    if result.get("error"):
+        return jsonify({"error": result["error"]}), 400
     now = datetime.now(ET)
     result["checked_at"] = now.strftime("%b %-d, %Y  ·  Eastern Time")
     result["checked_at_iso"] = now.isoformat()

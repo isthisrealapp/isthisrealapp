@@ -31,6 +31,9 @@
     const sub = data.sublabel
       ? `<p class="sublabel">${escapeHtml(data.sublabel)}</p>`
       : "";
+    const conf = data.confidence
+      ? `<p class="confidence">${escapeHtml(data.confidence)}</p>`
+      : "";
 
     resultEl.hidden = false;
     resultEl.innerHTML = `
@@ -38,6 +41,7 @@
         <p class="verdict-word ${escapeHtml(data.verdict)}">${escapeHtml(data.display || data.label)}</p>
         ${sub}
         <p class="reason">${escapeHtml(data.reason)}</p>
+        ${conf}
         <p class="action"><strong>What to do:</strong> ${escapeHtml(data.what_to_do)}</p>
         ${sourceHtml}
         <button type="button" class="share-btn" id="share-btn">Share</button>

@@ -22,7 +22,10 @@ PALETTE = {
     "real_outage": "#1F7A4D",
     "real_attack": "#C47A12",
     "working_fine": "#1B8A52",
-    "unclear": "#5C5C5C",
+    "no_outage_found": "#4D6E60",
+    "no_hack_found": "#4D6E60",
+    "probably_not_real": "#8B63B8",
+    "looks_legit": "#2B7A62",
 }
 
 BG = "#F6F4EF"
@@ -100,8 +103,8 @@ def _first_sentence(text: str) -> str:
 
 
 def render_share_card(result: dict) -> bytes:
-    verdict = result.get("verdict") or "unclear"
-    color = PALETTE.get(verdict, PALETTE["unclear"])
+    verdict = result.get("verdict") or "looks_legit"
+    color = PALETTE.get(verdict, INK)
     img = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
@@ -115,7 +118,9 @@ def render_share_card(result: dict) -> bytes:
 
     display = (result.get("display") or result.get("label") or verdict).upper()
     # Huge verdict word, wrapping only if needed (e.g. LIKELY SCAM)
-    verdict_font = _font("Newsreader-Semibold.ttf", 200 if " " not in display else 150)
+    words = display.split()
+    verdict_size = 200 if len(words) == 1 else (150 if len(words) == 2 else 128)
+    verdict_font = _font("Newsreader-Semibold.ttf", verdict_size)
     v_lines = _wrap(draw, display, verdict_font, max_w)
     # If a long label still overflows at 150, drop further.
     if any(draw.textlength(line, font=verdict_font) > max_w for line in v_lines):
@@ -153,6 +158,14 @@ def render_share_card(result: dict) -> bytes:
         for line in _wrap(draw, why, why_font, max_w)[:4]:
             draw.text((margin, y), line, font=why_font, fill=MUTED)
             y += 56
+
+    confidence = (result.get("confidence") or "").strip()
+    if confidence:
+        y += 20
+        conf_font = _font("Inter-Regular.ttf", 32)
+        for line in _wrap(draw, confidence, conf_font, max_w)[:2]:
+            draw.text((margin, y), line, font=conf_font, fill=MUTED)
+            y += 44
 
     footer_y = H - 160
     brand = _font("Outfit-Medium.ttf", 32)

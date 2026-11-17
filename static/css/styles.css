@@ -65,8 +65,12 @@
   --attack-bg: #fbf1de;
   --ok: #1b8a52;
   --ok-bg: #e7f5ec;
-  --unclear: #5c5c5c;
-  --unclear-bg: #efefef;
+  --clear: #4d6e60;
+  --clear-bg: #e7ece9;
+  --rumor: #8b63b8;
+  --rumor-bg: #f4eef8;
+  --legit: #2b7a62;
+  --legit-bg: #e7f3ee;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -173,7 +177,10 @@ h1 {
 .result-card.real_outage { background: var(--real-bg); }
 .result-card.real_attack { background: var(--attack-bg); }
 .result-card.working_fine { background: var(--ok-bg); }
-.result-card.unclear { background: var(--unclear-bg); }
+.result-card.no_outage_found,
+.result-card.no_hack_found { background: var(--clear-bg); }
+.result-card.probably_not_real { background: var(--rumor-bg); }
+.result-card.looks_legit { background: var(--legit-bg); }
 
 .verdict-word {
   font-family: Newsreader, Georgia, serif;
@@ -188,7 +195,10 @@ h1 {
 .verdict-word.real_outage { color: var(--real); }
 .verdict-word.real_attack { color: var(--attack); }
 .verdict-word.working_fine { color: var(--ok); }
-.verdict-word.unclear { color: var(--unclear); }
+.verdict-word.no_outage_found,
+.verdict-word.no_hack_found { color: var(--clear); }
+.verdict-word.probably_not_real { color: var(--rumor); }
+.verdict-word.looks_legit { color: var(--legit); }
 
 .sublabel {
   font-family: Outfit, Inter, sans-serif;
@@ -199,6 +209,11 @@ h1 {
   margin: 0 0 1rem;
 }
 .reason { margin: 0 0 0.85rem; font-size: 1.12rem; }
+.confidence {
+  margin: -0.4rem 0 0.85rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
 .action { margin: 0 0 0.85rem; font-size: 1.05rem; }
 .action strong { font-weight: 600; }
 .source, ul.sources { margin: 0 0 1.15rem; font-size: 1rem; padding: 0; list-style: none; }

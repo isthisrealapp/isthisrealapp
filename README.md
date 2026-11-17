@@ -1,6 +1,6 @@
 # IsThisRealApp
 
-IsThisRealApp is a consumer micro-SaaS that checks a suspicious text, email, link, or rumor and returns a shareable verdict: Scam, Likely scam, Hoax, Real outage (not a hack), Real attack, or Unclear.
+IsThisRealApp is a consumer micro-SaaS that checks a suspicious text, email, link, or rumor and returns a shareable verdict: Scam, Likely scam, Hoax, Real outage (not a hack), Real attack, Working fine, No outage found, No hack found, Probably not real, or Looks legit.
 
 Built to be helpful, not alarming. The page has three parts: a rumor checker, a short verified “What's real right now” feed, and a $5/month Alerts plan (early access — payments are not live yet).
 
