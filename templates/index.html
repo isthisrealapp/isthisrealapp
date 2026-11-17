@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IsThisRealApp — Paste a text or rumor. We'll tell you if it's real.</title>
+  <meta name="description" content="Got a weird text or scary rumor? Paste it. We'll tell you if it's real. See verified outages and attacks, and get alerts when a new one is confirmed.">
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#query">Skip to checker</a>
+
+  <main class="sheet">
+    <div class="hero">
+      <header class="brand">
+        <a class="logo" href="/" aria-label="IsThisRealApp home">IsThisRealApp</a>
+      </header>
+
+      <h1>Got a weird text or scary rumor? Paste it. We'll tell you if it's real.</h1>
+
+      <form id="check-form" autocomplete="off">
+        <label class="sr-only" for="query">Paste a text, email, link, or rumor</label>
+        <textarea id="query" name="query" rows="5" maxlength="8000" required placeholder="For example: Is the 90-day blackout real?"></textarea>
+        <button type="submit" class="btn" id="check-btn">
+          <span class="btn-label">Check it</span>
+          <span class="btn-wait" hidden>Checking…</span>
+        </button>
+      </form>
+
+      <div id="result" class="result" hidden></div>
+    </div>
+
+    <section class="feed" id="feed" aria-labelledby="feed-heading">
+      <h2 id="feed-heading">What's real right now</h2>
+      <ul class="feed-list">
+        {% for item in feed %}
+        <li class="feed-item">
+          <span class="tag tag-{{ item.tag }}">{{ item.tag_label }}</span>
+          <div class="feed-body">
+            <p class="feed-headline">{{ item.headline }}</p>
+            <p class="feed-meta">
+              <time datetime="{{ item.occurred_on }}">{{ item.display_date }}</time>
+              · <a href="{{ item.source_url }}" target="_blank" rel="noopener">{{ item.source_name }}</a>
+            </p>
+          </div>
+        </li>
+        {% else %}
+        <li class="feed-empty">No verified items yet.</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="upgrade" id="alerts" aria-labelledby="alerts-heading">
+      <h2 id="alerts-heading">Get alerted the moment a major outage or cyberattack is confirmed</h2>
+      <p class="upgrade-price">$5/month. Email or text. Payments aren't live yet — this is early access.</p>
+      <form id="alerts-form" class="alerts-form">
+        <fieldset class="channel-pick">
+          <legend class="sr-only">How should we reach you?</legend>
+          <label><input type="radio" name="channel" value="email" checked> Email</label>
+          <label><input type="radio" name="channel" value="text"> Text</label>
+        </fieldset>
+        <label class="sr-only" for="alerts-email">Email</label>
+        <input id="alerts-email" type="email" name="email" required placeholder="Email" autocomplete="email">
+        <label class="sr-only" for="alerts-phone">Phone (needed for text alerts)</label>
+        <input id="alerts-phone" type="tel" name="phone" placeholder="Phone (for text alerts)" autocomplete="tel">
+        <button type="submit" class="btn">Get early access</button>
+        <p id="alerts-status" class="form-status" role="status" hidden></p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p class="disclaimer">Informational, not a guarantee. Check official sources. isthisrealapp.com</p>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

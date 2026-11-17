@@ -1,0 +1,211 @@
+{
+  "updated": "2026-11-17",
+  "events": [
+    {
+      "id": "blackout-hoax-2026-11-17",
+      "title": "The 90-day blackout claim is a hoax",
+      "verdict": "hoax",
+      "priority": 10,
+      "keywords": [
+        "90-day blackout",
+        "90 day blackout",
+        "ninety day blackout",
+        "90-day black out",
+        "90 day power outage",
+        "90-day outage",
+        "blackout starting nov",
+        "blackout will start",
+        "blackout starts nov",
+        "blackout on november 17",
+        "blackout on nov 17",
+        "november 17 blackout",
+        "nov 17 blackout",
+        "11/17 blackout",
+        "fema blackout",
+        "90 day emergency",
+        "three month blackout",
+        "3 month blackout",
+        "national blackout",
+        "nationwide blackout"
+      ],
+      "summary": "The 90-day blackout claim is fake. It was a routine FEMA and FCC alert test, not a shutdown.",
+      "what_to_do": "Don't share it or stockpile for this rumor.",
+      "sources": [
+        {
+          "name": "PBS NewsHour",
+          "url": "https://www.pbs.org/newshour/nation/debunking-social-media-posts-that-claim-a-90-day-blackout-will-start-nov-17"
+        }
+      ]
+    },
+    {
+      "id": "chase-technical-issue-2026-11-16",
+      "title": "Chase had a technical issue, not a confirmed hack",
+      "verdict": "real_outage",
+      "priority": 20,
+      "keywords": [
+        "chase hacked",
+        "chase hack",
+        "is chase hacked",
+        "was chase hacked",
+        "chase cyberattack",
+        "chase cyber attack",
+        "chase data breach",
+        "chase outage",
+        "chase down",
+        "chase not working",
+        "chase app down",
+        "chase bank hacked",
+        "jpmorgan hacked",
+        "jp morgan hacked",
+        "jpmorgan chase hacked",
+        "jpmorgan outage",
+        "jp morgan outage",
+        "chase technical issue",
+        "chase login not working"
+      ],
+      "summary": "Chase had a technical issue this week, not a confirmed hack. Officials say the recent outages were not a coordinated attack.",
+      "what_to_do": "Use the official Chase app or chase.com — ignore “verify your account” texts.",
+      "sources": [
+        {
+          "name": "CNBC",
+          "url": "https://www.cnbc.com/2026/11/16/jpmorgan-chase-technical-issue.html"
+        },
+        {
+          "name": "CNBC (outages were not a coordinated attack)",
+          "url": "https://www.cnbc.com/2026/11/17/apple-microsoft-faa-jpmorgan-outages.html"
+        }
+      ]
+    },
+    {
+      "id": "faa-ground-stop-2026-11",
+      "title": "FAA ground stop was an equipment failure, not a hack",
+      "verdict": "real_outage",
+      "priority": 15,
+      "keywords": [
+        "faa hacked",
+        "faa hack",
+        "faa cyberattack",
+        "faa ground stop",
+        "nationwide ground stop",
+        "flights canceled",
+        "flights cancelled",
+        "flight cancellations",
+        "air traffic control outage",
+        "faa outage",
+        "why are flights canceled",
+        "why are flights cancelled",
+        "12500 flights",
+        "12,500 flights"
+      ],
+      "summary": "The FAA ground stop was an equipment failure, not a hack. About 12,500 flights were canceled.",
+      "what_to_do": "Rebook only in your airline's official app or website.",
+      "sources": [
+        {
+          "name": "FAA",
+          "url": "https://www.faa.gov/newsroom/nationwide-ground-stop-questions-and-answers"
+        },
+        {
+          "name": "CNBC",
+          "url": "https://www.cnbc.com/2026/11/17/apple-microsoft-faa-jpmorgan-outages.html"
+        },
+        {
+          "name": "McAfee",
+          "url": "https://www.mcafee.com/blogs/privacy-identity-protection/faa-ground-stop-flight-cancellation-scams/"
+        }
+      ]
+    },
+    {
+      "id": "apple-microsoft-outages-2026-11",
+      "title": "Apple and Microsoft 365 outages were bugs, not a coordinated attack",
+      "verdict": "real_outage",
+      "priority": 12,
+      "keywords": [
+        "apple hacked",
+        "apple hack",
+        "apple outage",
+        "apple down",
+        "icloud down",
+        "apple services down",
+        "microsoft hacked",
+        "microsoft 365 down",
+        "microsoft 365 outage",
+        "office 365 down",
+        "office 365 outage",
+        "outlook down",
+        "teams down",
+        "azure outage",
+        "microsoft cyberattack",
+        "apple cyberattack"
+      ],
+      "summary": "Apple and Microsoft 365 had outages caused by bugs, not a confirmed hack.",
+      "what_to_do": "Sign in only through the official app or website, not a link in a text.",
+      "sources": [
+        {
+          "name": "CNBC",
+          "url": "https://www.cnbc.com/2026/11/17/apple-microsoft-faa-jpmorgan-outages.html"
+        }
+      ]
+    },
+    {
+      "id": "optimizely-supply-chain-2026-11-16",
+      "title": "A real supply-chain attack hit 178 major websites",
+      "verdict": "real_attack",
+      "priority": 18,
+      "keywords": [
+        "ikea hacked",
+        "ikea hack",
+        "was ikea hacked",
+        "ikea breach",
+        "ikea skimmer",
+        "ikea malware",
+        "zoom hacked",
+        "cnn hacked",
+        "hsbc hacked",
+        "optimizely",
+        "supply chain attack",
+        "supply-chain attack",
+        "card skimming",
+        "magecart",
+        "178 sites",
+        "178 websites",
+        "hacked sites this week"
+      ],
+      "summary": "Yes — a real attack on Nov 16 put card-skimming malware on 178 sites, including IKEA, Zoom, CNN, and HSBC.",
+      "what_to_do": "If you entered a card on an affected site around then, watch your statements.",
+      "sources": [
+        {
+          "name": "BleepingComputer",
+          "url": "https://www.bleepingcomputer.com/news/security/optimizely-supply-chain-attack-infects-major-brands-sites-with-malware/"
+        }
+      ]
+    },
+    {
+      "id": "airline-rebooking-scams-2026-11",
+      "title": "Fake airline rebooking and refund texts are circulating",
+      "verdict": "scam",
+      "priority": 8,
+      "keywords": [
+        "rebook at",
+        "pay to rebook",
+        "rebooking fee",
+        "refund processing fee",
+        "flight was canceled pay",
+        "flight was cancelled pay",
+        "click here to rebook",
+        "pay $ to rebook"
+      ],
+      "summary": "This is a scam. Airlines don't ask you to pay a rebooking fee through a text or a fake website.",
+      "what_to_do": "Don't click or pay. Rebook only in the official airline app or website.",
+      "sources": [
+        {
+          "name": "McAfee",
+          "url": "https://www.mcafee.com/blogs/privacy-identity-protection/faa-ground-stop-flight-cancellation-scams/"
+        },
+        {
+          "name": "FAA",
+          "url": "https://www.faa.gov/newsroom/nationwide-ground-stop-questions-and-answers"
+        }
+      ]
+    }
+  ]
+}

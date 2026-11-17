@@ -1,0 +1,53 @@
+{
+  "items": [
+    {
+      "id": "blackout-hoax-2026-11-17",
+      "headline": "90-day blackout claim is a hoax",
+      "tag": "hoax",
+      "occurred_on": "2026-11-17",
+      "source_name": "PBS NewsHour",
+      "source_url": "https://www.pbs.org/newshour/nation/debunking-social-media-posts-that-claim-a-90-day-blackout-will-start-nov-17"
+    },
+    {
+      "id": "apple-outage-2026-11-17",
+      "headline": "Apple services outage, not a hack",
+      "tag": "outage",
+      "occurred_on": "2026-11-17",
+      "source_name": "CNBC",
+      "source_url": "https://www.cnbc.com/2026/11/17/apple-microsoft-faa-jpmorgan-outages.html"
+    },
+    {
+      "id": "optimizely-attack-2026-11-16",
+      "headline": "Card-skimming attack on 178 sites, including IKEA",
+      "tag": "attack",
+      "occurred_on": "2026-11-16",
+      "source_name": "BleepingComputer",
+      "source_url": "https://www.bleepingcomputer.com/news/security/optimizely-supply-chain-attack-infects-major-brands-sites-with-malware/"
+    },
+    {
+      "id": "chase-bug-2026-11-16",
+      "headline": "Chase app bug, not a hack",
+      "tag": "outage",
+      "occurred_on": "2026-11-16",
+      "source_name": "CNBC",
+      "source_url": "https://www.cnbc.com/2026/11/16/jpmorgan-chase-technical-issue.html"
+    },
+    {
+      "id": "faa-ground-stop-2026-11-13",
+      "headline": "FAA nationwide ground stop",
+      "tag": "outage",
+      "occurred_on": "2026-11-13",
+      "source_name": "FAA",
+      "source_url": "https://www.faa.gov/newsroom/nationwide-ground-stop-questions-and-answers"
+    },
+    {
+      "id": "microsoft-365-outage-2026-11-12",
+      "headline": "Microsoft 365 outage",
+      "tag": "outage",
+      "occurred_on": "2026-11-12",
+      "occurred_end": "2026-11-13",
+      "source_name": "CNBC",
+      "source_url": "https://www.cnbc.com/2026/11/17/apple-microsoft-faa-jpmorgan-outages.html"
+    }
+  ]
+}
