@@ -53,6 +53,12 @@ VERDICT_META = {
         "tone": "real_attack",
         "short": "This was a confirmed attack.",
     },
+    "working_fine": {
+        "label": "Working fine",
+        "display": "Working fine",
+        "tone": "ok",
+        "short": "Official status says everything is working.",
+    },
     "unclear": {
         "label": "Unclear",
         "display": "Unclear",

@@ -63,6 +63,8 @@
   --real-bg: #e8f6ee;
   --attack: #c47a12;
   --attack-bg: #fbf1de;
+  --ok: #1b8a52;
+  --ok-bg: #e7f5ec;
   --unclear: #5c5c5c;
   --unclear-bg: #efefef;
 }
@@ -170,6 +172,7 @@ h1 {
 .result-card.hoax { background: var(--hoax-bg); }
 .result-card.real_outage { background: var(--real-bg); }
 .result-card.real_attack { background: var(--attack-bg); }
+.result-card.working_fine { background: var(--ok-bg); }
 .result-card.unclear { background: var(--unclear-bg); }
 
 .verdict-word {
@@ -184,6 +187,7 @@ h1 {
 .verdict-word.hoax { color: var(--hoax); }
 .verdict-word.real_outage { color: var(--real); }
 .verdict-word.real_attack { color: var(--attack); }
+.verdict-word.working_fine { color: var(--ok); }
 .verdict-word.unclear { color: var(--unclear); }
 
 .sublabel {

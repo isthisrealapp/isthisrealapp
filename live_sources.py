@@ -1046,39 +1046,25 @@ def interpret(ev: LiveEvidence) -> dict:
                 "what_to_do": f"If something still looks off, check {name}'s official status page.",
                 "sources": pick_sources(ev, outage_hits, include_status=True),
             }
-        reason = f"No sign of a current {name} outage — its official status page says all systems are operational."
+        reason = f"{name} isn't down. Its official status page says everything is working."
         return {
-            "verdict": "unclear",
+            "verdict": "working_fine",
             "reason": _one_line(reason),
-            "what_to_do": f"If {name} still looks broken for you, check its official status page.",
+            "what_to_do": f"If it still looks broken for you, check {name}'s official status page.",
             "sources": pick_sources(ev, include_status=True),
         }
 
-    # Weak or no evidence
-    if ev.news:
-        lead = ev.news[0]
-        reason = (
-            f"We couldn't confirm a current outage or attack. "
-            f"Recent coverage we found includes {lead.outlet}: “{lead.title.split(' - ')[0]}.”"
-        )
-        return {
-            "verdict": "unclear",
-            "reason": _one_line(reason),
-            "what_to_do": "Treat it as unconfirmed until you see it on an official status page or a trusted outlet.",
-            "sources": pick_sources(ev, ev.news[:3]),
-        }
-
+    # Weak or no official confirmation
+    name_disp = "X" if ev.parsed.entity_key == "x" else (ev.parsed.entity_name or name)
     if ev.parsed.entity_name:
-        name_disp = "X (Twitter)" if ev.parsed.entity_key == "x" else name
-        article = "an" if name_disp[:1].lower() in "aeioux" else "a"
-        reason = f"We didn't find recent official status or trusted news confirming {article} {name_disp} outage or attack."
+        reason = f"No sign of a widespread {name_disp} outage in trusted news right now."
     else:
-        reason = "We didn't find recent trusted reporting that confirms this."
+        reason = "No sign of this in trusted news right now."
     return {
         "verdict": "unclear",
         "reason": _one_line(reason),
         "what_to_do": "If you need to reach a company, use its official app or website — not a link from a message.",
-        "sources": [],
+        "sources": pick_sources(ev, ev.news[:3]) if ev.news else [],
     }
 
 

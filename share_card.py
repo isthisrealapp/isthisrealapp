@@ -21,6 +21,7 @@ PALETTE = {
     "hoax": "#6B3FA0",
     "real_outage": "#1F7A4D",
     "real_attack": "#C47A12",
+    "working_fine": "#1B8A52",
     "unclear": "#5C5C5C",
 }
 
@@ -91,7 +92,10 @@ def _first_sentence(text: str) -> str:
     if not parts:
         return ""
     if parts[0].lower() in _GENERIC_WHY and len(parts) > 1:
-        return parts[1]
+        parts = parts[1:]
+    # Keep a short two-sentence answer (e.g. Working fine) instead of clipping it.
+    if len(parts) >= 2 and len(" ".join(parts[:2])) <= 160:
+        return " ".join(parts[:2])
     return parts[0]
 
 
