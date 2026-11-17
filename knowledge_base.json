@@ -64,7 +64,7 @@
         "chase login not working"
       ],
       "summary": "Chase had a technical issue this week, not a confirmed hack. Officials say the recent outages were not a coordinated attack.",
-      "what_to_do": "Use the official Chase app or chase.com — ignore “verify your account” texts.",
+      "what_to_do": "Use the official Chase app or chase.com \u2014 ignore \u201cverify your account\u201d texts.",
       "sources": [
         {
           "name": "CNBC",
@@ -95,7 +95,12 @@
         "why are flights canceled",
         "why are flights cancelled",
         "12500 flights",
-        "12,500 flights"
+        "12,500 flights",
+        "stop all flights",
+        "faa stop",
+        "did the faa",
+        "faa stopped",
+        "faa halt"
       ],
       "summary": "The FAA ground stop was an equipment failure, not a hack. About 12,500 flights were canceled.",
       "what_to_do": "Rebook only in your airline's official app or website.",
@@ -170,7 +175,7 @@
         "178 websites",
         "hacked sites this week"
       ],
-      "summary": "Yes — a real attack on Nov 16 put card-skimming malware on 178 sites, including IKEA, Zoom, CNN, and HSBC.",
+      "summary": "Yes \u2014 a real attack on Nov 16 put card-skimming malware on 178 sites, including IKEA, Zoom, CNN, and HSBC.",
       "what_to_do": "If you entered a card on an affected site around then, watch your statements.",
       "sources": [
         {

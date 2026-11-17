@@ -21,9 +21,12 @@
   }
 
   function renderResult(data) {
-    const source = (data.sources || [])[0];
-    const sourceHtml = source
-      ? `<p class="source"><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener">${escapeHtml(source.name)}</a></p>`
+    const sources = (data.sources || []).slice(0, 3);
+    const sourceHtml = sources.length
+      ? `<ul class="sources">${sources.map((s) => {
+          const ago = s.time_ago ? ` <span class="time-ago">${escapeHtml(s.time_ago)}</span>` : "";
+          return `<li><a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.name)}</a>${ago}</li>`;
+        }).join("")}</ul>`
       : "";
     const sub = data.sublabel
       ? `<p class="sublabel">${escapeHtml(data.sublabel)}</p>`

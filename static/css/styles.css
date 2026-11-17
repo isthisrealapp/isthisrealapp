@@ -197,8 +197,11 @@ h1 {
 .reason { margin: 0 0 0.85rem; font-size: 1.12rem; }
 .action { margin: 0 0 0.85rem; font-size: 1.05rem; }
 .action strong { font-weight: 600; }
-.source { margin: 0 0 1.15rem; font-size: 1rem; }
-.source a { font-weight: 600; }
+.source, ul.sources { margin: 0 0 1.15rem; font-size: 1rem; padding: 0; list-style: none; }
+.source a, ul.sources a { font-weight: 600; }
+ul.sources li { margin: 0.2rem 0; }
+.time-ago { color: var(--muted); font-weight: 400; }
+.time-ago::before { content: " · "; }
 .share-btn {
   display: inline-flex;
   align-items: center;

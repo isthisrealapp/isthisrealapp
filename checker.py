@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from live_sources import enrich_scam_with_live, gather_evidence, interpret
+
 ROOT = Path(__file__).resolve().parent
 KB_PATH = ROOT / "knowledge_base.json"
 
@@ -57,6 +59,23 @@ VERDICT_META = {
         "tone": "unclear",
         "short": "We can't confirm this.",
     },
+}
+
+BRAND_DISPLAY = {
+    "usps": "USPS",
+    "ups": "UPS",
+    "faa": "FAA",
+    "irs": "IRS",
+    "ssa": "SSA",
+    "fcc": "FCC",
+    "fema": "FEMA",
+    "tsa": "TSA",
+    "at&t": "AT&T",
+    "hsbc": "HSBC",
+    "cnn": "CNN",
+    "ikea": "IKEA",
+    "jpmorgan": "JPMorgan",
+    "jp morgan": "JPMorgan",
 }
 
 OFFICIAL_DOMAINS: dict[str, list[str]] = {
@@ -171,6 +190,11 @@ PAY_REBOOK_RE = re.compile(
     r"confirm (your )?payment)\b",
     re.I,
 )
+PACKAGE_FEE_RE = re.compile(
+    r"\b(package|parcel|shipment|delivery)\b.{0,80}\b(pay|fee|customs|postage due|release|held|pending)\b"
+    r"|\b(pay|fee|customs|postage due)\b.{0,80}\b(package|parcel|shipment|delivery)\b",
+    re.I,
+)
 WIRE_RE = re.compile(
     r"\b(wire transfer|western union|moneygram|gift card to (pay|cover)|"
     r"send money (to|via)|pay with (bitcoin|crypto|gift))\b",
@@ -256,7 +280,7 @@ def lookalike_hits(text: str, domains: list[str]) -> list[dict]:
                             "official": official[0],
                             "code": "lookalike_domain",
                             "detail": (
-                                f"{domain} is not {brand.title()}'s official site "
+                                f"{domain} is not {BRAND_DISPLAY.get(brand, brand.title())}'s official site "
                                 f"({official[0]})."
                             ),
                         }
@@ -273,7 +297,7 @@ def lookalike_hits(text: str, domains: list[str]) -> list[dict]:
                             "official": official[0],
                             "code": "mismatched_brand_domain",
                             "detail": (
-                                f"This message mentions {brand.title()} but links to "
+                                f"This message mentions {BRAND_DISPLAY.get(brand, brand.title())} but links to "
                                 f"{domain}, not {official[0]}."
                             ),
                         }
@@ -312,6 +336,15 @@ def detect_signals(text: str) -> list[Signal]:
                 "Asks you to pay a fee to rebook, refund, or unlock something",
                 4,
                 "Companies almost never ask you to pay a small fee through a text or a surprise link.",
+            )
+        )
+    if PACKAGE_FEE_RE.search(text):
+        signals.append(
+            Signal(
+                "package_fee",
+                "Asks you to pay a fee to release a package",
+                4,
+                "Carriers don't ask you to pay a delivery or customs fee through a surprise text link.",
             )
         )
     if GIFT_CARD_RE.search(text):
@@ -395,11 +428,14 @@ def _sources(event: dict | None, extra: list[dict] | None = None) -> list[dict]:
         if not url or url in seen:
             continue
         seen.add(url)
-        out.append({"name": src.get("name") or url, "url": url})
+        item = {"name": src.get("name") or url, "url": url}
+        if src.get("time_ago"):
+            item["time_ago"] = src["time_ago"]
+        out.append(item)
     return out
 
 
-def decide(text: str, events: list[dict]) -> dict:
+def decide(text: str, events: list[dict], live=None) -> dict:
     text = _normalize(text)
     signals = detect_signals(text)
     weight = sum(s.weight for s in signals)
@@ -430,12 +466,16 @@ def decide(text: str, events: list[dict]) -> dict:
             if event
             else "Don't click, pay, or share codes. Use the official app or website."
         )
+        sources = _sources(event)
+        if live:
+            reason, live_sources = enrich_scam_with_live(reason, live)
+            sources = _sources(event, live_sources)
         return _result(
             "scam",
             text,
             reason,
             what,
-            _sources(event),
+            sources,
             signals,
             top,
         )
@@ -463,12 +503,17 @@ def decide(text: str, events: list[dict]) -> dict:
                 verdict = "unclear"
 
         if top:
+            reason = top["summary"]
+            what = top["what_to_do"]
+            sources = _sources(top)
+            if live:
+                reason, what, sources = _blend_kb_with_live(top, live, reason, what, sources)
             return _result(
                 verdict,
                 text,
-                top["summary"],
-                top["what_to_do"],
-                _sources(top),
+                reason,
+                what,
+                sources,
                 signals,
                 top,
             )
@@ -479,12 +524,57 @@ def decide(text: str, events: list[dict]) -> dict:
         what = "Don't click or pay. Confirm it in the official app or website."
         return _result("likely_scam" if weight >= 4 else "unclear", text, reason, what, [], signals, None)
 
+    if live:
+        suggestion = interpret(live)
+        return _result(
+            suggestion["verdict"],
+            text,
+            suggestion["reason"],
+            suggestion["what_to_do"],
+            suggestion.get("sources") or [],
+            signals,
+            None,
+        )
+
     reason = (
         "We can't confirm this. It doesn't match a known hoax or attack, and it "
         "doesn't show the usual scam red flags."
     )
     what = "If you were expecting it, confirm through a number or site you already use."
     return _result("unclear", text, reason, what, [], signals, None)
+
+
+
+def _blend_kb_with_live(event, live, reason, what, sources):
+    """Keep the curated verdict, but prefer a fresher official-status one-liner
+    and append live citations (never inventing links)."""
+    extra = []
+    status_first = False
+    if live and live.status:
+        extra.append(live.status.as_source())
+        status = live.status
+        if not status.operational and status.summary:
+            reason = status.summary
+            status_first = True
+        elif status.resolved_today and event.get("verdict") == "real_outage":
+            reason = status.summary
+            status_first = True
+    if live and live.news:
+        from live_sources import pick_sources
+        extra.extend(pick_sources(live, live.news, include_status=False, limit=3))
+    if extra:
+        if status_first:
+            sources = _sources(None, extra + (event.get("sources") or []))
+        else:
+            sources = _sources(event, extra)
+        sources = sources[:3]
+    # Keep the reason to two short sentences.
+    parts = reason.split(". ")
+    if len(parts) > 2:
+        reason = ". ".join(parts[:2])
+        if not reason.endswith("."):
+            reason += "."
+    return reason, what, sources
 
 
 def _scam_reason(signals: list[Signal], text: str, event: dict | None = None, likely: bool = False) -> str:
@@ -498,6 +588,8 @@ def _scam_reason(signals: list[Signal], text: str, event: dict | None = None, li
         return f"This is a scam. {detail}."
     if any(s.code == "pay_to_rebook" for s in signals):
         return "This is a scam. Airlines don't ask you to pay a rebooking fee by text."
+    if any(s.code == "package_fee" for s in signals):
+        return "This is a scam. Carriers don't ask you to pay a delivery fee through a text link."
     if any(s.code in {"gift_cards", "crypto", "wire"} for s in signals):
         return "This is a scam. Real companies won't ask you to pay with gift cards or crypto."
     if any(s.code == "secrets" for s in signals):
@@ -651,7 +743,7 @@ def get_events() -> list[dict]:
     return _EVENTS
 
 
-def check(text: str, use_llm: bool = True) -> dict:
+def check(text: str, use_llm: bool = True, use_live: bool = True) -> dict:
     text = (text or "").strip()
     if not text:
         return _result(
@@ -665,7 +757,16 @@ def check(text: str, use_llm: bool = True) -> dict:
         )
     if len(text) > 8000:
         text = text[:8000]
-    result = decide(text, get_events())
+    live = None
+    if use_live:
+        try:
+            live = gather_evidence(text, budget=5.5)
+        except Exception:
+            live = None
+    result = decide(text, get_events(), live=live)
+    if live:
+        result["entity"] = live.parsed.entity_name
+        result["topic"] = live.parsed.topic
     if use_llm:
         result = maybe_polish_with_llm(result)
     return result

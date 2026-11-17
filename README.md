@@ -51,9 +51,13 @@ python send_alert.py --latest
 
 ## What’s in a check
 
-1. Rule-based scam signals (urgency, pay-to-rebook fees, gift cards, crypto, lookalike domains, shortened links, mismatched brand domains, requests for codes or passwords).
-2. A curated knowledge base of verified events from this week (November 2026), each with official source URLs.
-3. A 1080×1920 share image for TikTok and Instagram stories, at `/api/share/<id>.png`.
+1. Rule-based scam signals (urgency, pay-to-rebook fees, package fees, gift cards, crypto, lookalike domains, shortened links, mismatched brand domains, requests for codes or passwords).
+2. A curated knowledge base of verified events, used as a high-confidence layer when a known event matches.
+3. Live lookups (no API key required) when you ask about any company, outage, attack, or rumor:
+   - Official status pages (Atlassian Statuspage plus Apple, Slack, AWS, Google Cloud, Azure, and Heroku)
+   - Google News RSS, with recency (last ~72 hours) and trust weighting for reputable and fact-checking outlets
+   Fetches run in parallel, time out so a check stays under ~6 seconds, are cached for a few minutes, and fail soft if a source is down. Sources are never invented.
+4. A 1080×1920 share image for TikTok and Instagram stories, at `/api/share/<id>.png`.
 
 ## Going live
 
